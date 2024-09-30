@@ -11,7 +11,7 @@ def worker(callback:Callable, *args):
     Args:
         callback (Callable): function to call
     """
-    callback(args[0], args[1], result_dict=args[2], thread_lock=args[3])
+    callback(args[0], args[1], args[2], thread_lock=args[3])
 
 def start_threds(files:list[str], keywords:list[str], num_threads:int):
     """starts threads that will process search function

@@ -1,4 +1,4 @@
-from multiprocessing import Process, Queue, Lock, cpu_count
+from multiprocessing import Process, Lock, cpu_count, Manager
 import time
 from collections import defaultdict
 from typing import Callable
@@ -11,7 +11,7 @@ def worker(callback:Callable, *args):
     Args:
         callback (Callable): function to call
     """
-    callback(args[0], args[1], queue=args[2], proc_lock=args[3])
+    callback(args[0], args[1], args[2], proc_lock=args[3])
 
 def start_processes(files:list[str], keywords:list[str], num_processes:int | None = None):
     """starts processes that will process search function
@@ -29,26 +29,25 @@ def start_processes(files:list[str], keywords:list[str], num_processes:int | Non
 
     chunk_size = len(files) // num_processes
     processes = []
-    queue = Queue()
+    result_dict = defaultdict(list)
     lock = Lock()
 
-    for i in range(num_processes):
-        start_index = i * chunk_size
-        end_index = (i + 1) * chunk_size if i != num_processes - 1 else len(files)
-        process_files = files[start_index:end_index]
-        process = Process(target=worker, args=(find_keywords, process_files, keywords, queue, lock))
-        processes.append(process)
-        process.start()
+    with Manager() as manager:
+        shared_dict = manager.dict({word: manager.list([]) for word in keywords})
+        for i in range(num_processes):
+            start_index = i * chunk_size
+            end_index = (i + 1) * chunk_size if i != num_processes - 1 else len(files)
+            process_files = files[start_index:end_index]
+            process = Process(target=worker, args=(find_keywords, process_files, keywords, shared_dict, lock))
+            processes.append(process)
+            process.start()
 
-    for process in processes:
-        process.join()
+        for process in processes:
+            process.join()
 
-    final_results = defaultdict(list)
-    while not queue.empty():
-        result = queue.get()
-        for keyword, paths in result.items():
-            final_results[keyword].append(paths)
+        for key, value in shared_dict.items():
+            result_dict[key] = list(value)
 
     time_multiprocessing_manager = time.time() - start_time
 
-    print_results(time_multiprocessing_manager, final_results, f"Time Multiprocessing with {num_processes} processes: ")
+    print_results(time_multiprocessing_manager, result_dict, f"Time Multiprocessing with {num_processes} processes: ")

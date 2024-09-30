@@ -1,6 +1,6 @@
 from collections import defaultdict
 from threading import Lock as Thread_Lock
-from multiprocessing.queues import Queue
+from multiprocessing.managers import DictProxy
 from multiprocessing.synchronize import Lock as Process_Lock
 import re
 from print_results import logging
@@ -8,9 +8,8 @@ from print_results import logging
 def find_keywords(
     files:list[str],
     keywords:list[str],
-    result_dict:defaultdict|None = None,
+    result_dict:defaultdict|DictProxy,
     thread_lock:Thread_Lock = None,
-    queue:Queue|None = None,
     proc_lock:Process_Lock|None=None
 ):
     """_summary_
@@ -18,9 +17,8 @@ def find_keywords(
     Args:
         files list[str): list of pathes to files
         keywords (list[str): list of keyword to be searched
-        result_dict (defaultdict | None, optional): dictionary that will contain results. Defaults to None.
+        result_dict (defaultdict | DictProxy): dictionary that will contain results.
         thread_lock (Thread_Lock, optional): thread lock. Defaults to None.
-        queue (Queue | None, optional): queue that will contain results. Defaults to None.
         proc_lock (Process_Lock | None, optional): process lock. Defaults to None.
     """
 
@@ -31,19 +29,17 @@ def find_keywords(
             logging.info(f"Processing file: {file_path}")
             if (thread_lock):
                 with thread_lock:  # Providing safe work with dictionary
-                    for keyword in keywords:
-                        result = re.search(keyword, text, re.IGNORECASE)
-                        if result:
-                            result_dict[keyword].append(file_path)
+                    run_search(keywords, text, file_path, result_dict)
             if (proc_lock):
-                results = defaultdict(list)
-                for keyword in keywords:
-                    result = re.search(keyword, text, re.IGNORECASE)
-                    if result:
-                        results[keyword].append(file_path)
-                        with proc_lock:
-                            queue.put(results)
+                with proc_lock:
+                    run_search(keywords, text, file_path, result_dict)
         except FileNotFoundError:
             logging.error(f"File not found: {file_path}")
         except Exception as e:
             logging.error(f"Error processing file {file_path}: {str(e)}")
+
+def run_search(keywords:list[str], text:str, path:str, result_dict:defaultdict|DictProxy):
+    for keyword in keywords:
+        result = re.search(keyword, text, re.IGNORECASE)
+        if result:
+            result_dict[keyword].append(path)
